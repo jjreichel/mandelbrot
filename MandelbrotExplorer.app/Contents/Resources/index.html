@@ -644,14 +644,20 @@ document.getElementById('max-iter').addEventListener('input', e => {
 });
 document.getElementById('bulb-n').addEventListener('input', e => {
     bulbN = parseFloat(e.target.value);
+    document.getElementById('bulb-n-val').textContent = bulbN;
+    try { compile3d(); showError('error-3d', ''); } catch(err) { showError('error-3d', err.message); }
     needsRender = true;
 });
 document.getElementById('bulb-iter').addEventListener('input', e => {
     bulbIter = parseInt(e.target.value);
+    document.getElementById('bulb-iter-val').textContent = bulbIter;
+    try { compile3d(); showError('error-3d', ''); } catch(err) { showError('error-3d', err.message); }
     needsRender = true;
 });
 document.getElementById('bulb-ao').addEventListener('input', e => {
     bulbAO = parseFloat(e.target.value);
+    document.getElementById('bulb-ao-val').textContent = bulbAO.toFixed(2);
+    try { compile3d(); showError('error-3d', ''); } catch(err) { showError('error-3d', err.message); }
     needsRender = true;
 });
 
