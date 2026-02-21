@@ -252,6 +252,13 @@ let bulbIter = 8;
 let bulbAO = 0.5;
 let camera = { theta: 0.5, phi: 0.3, dist: 3.5 };
 
+// Perturbationstheorie (2D Präzision)
+let programPerturb = null;
+let orbitTex = null;
+let orbitValid = false;
+let isDefaultFormula = true;
+let perturbAvailable = false;
+
 // ============================================================
 // Hilfsfunktionen: Shader compilieren
 // ============================================================
@@ -398,6 +405,96 @@ function compile2d(formulaSrc, colorizerSrc) {
 }
 
 // ============================================================
+// Perturbationstheorie: Orbit-Textur + Shader
+// ============================================================
+// Referenz-Orbit am Mittelpunkt in JS float64 berechnen und in
+// eine Float32-Textur hochladen. Der Shader iteriert nur noch δ.
+function computeOrbit() {
+    if (!perturbAvailable) return;
+    orbitValid = false;
+    const n = maxIter2d;
+    const cx = center.x, cy = center.y;
+    const data = new Float32Array(n * 4);   // RGBA: (Zx, Zy, 0, 0)
+    let zx = 0, zy = 0;
+    for (let i = 0; i < n; i++) {
+        data[i * 4]     = zx;
+        data[i * 4 + 1] = zy;
+        const nx = zx * zx - zy * zy + cx;
+        zy = 2 * zx * zy + cy;
+        zx = nx;
+        if (zx * zx + zy * zy > 65536) return;  // Orbit entkommen → kein Perturb
+    }
+    // Orbit vollständig → in Textur laden
+    if (!orbitTex) orbitTex = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, orbitTex);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl.NEAREST);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_S, gl.CLAMP_TO_EDGE);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_WRAP_T, gl.CLAMP_TO_EDGE);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, n, 1, 0, gl.RGBA, gl.FLOAT, data);
+    gl.bindTexture(gl.TEXTURE_2D, null);
+    orbitValid = true;
+}
+
+// Perturbations-Shader: δ_{n+1} = 2·Z_n·δ_n + δ_n² + Δc
+function build2dPerturbFragSrc(colorizerSrc) {
+    return `
+precision highp float;
+uniform vec2      u_res;
+uniform float     u_zoom;
+uniform int       u_maxIter;
+uniform sampler2D u_orbit;
+
+${GLSL_HELPERS}
+
+${colorizerSrc}
+
+void main() {
+    vec2 uv = (gl_FragCoord.xy / u_res - 0.5) * 2.0;
+    uv.x *= u_res.x / u_res.y;
+
+    // Δc = Pixel-Offset vom Referenzpunkt (klein → exakt in float32)
+    vec2 dc = uv * (0.5 / u_zoom);
+
+    vec2 dz = vec2(0.0);
+    float t  = 0.0;
+    bool escaped = false;
+
+    for (int i = 0; i < 4096; i++) {
+        if (i >= u_maxIter) break;
+
+        // Referenz-Orbit Z_i aus Textur
+        float tx = (float(i) + 0.5) / float(u_maxIter);
+        vec2 Z = texture2D(u_orbit, vec2(tx, 0.5)).rg;
+
+        // δ_{n+1} = 2·Z·δ + δ² + Δc
+        float dzx = 2.0*(Z.x*dz.x - Z.y*dz.y) + dz.x*dz.x - dz.y*dz.y + dc.x;
+        float dzy = 2.0*(Z.x*dz.y + Z.y*dz.x) + 2.0*dz.x*dz.y + dc.y;
+        dz = vec2(dzx, dzy);
+
+        float r2 = dot(Z + dz, Z + dz);
+        if (r2 > 256.0) {
+            float smooth = float(i) + 1.0 - log2(log2(sqrt(r2)));
+            t = clamp(smooth / float(u_maxIter), 0.0, 1.0);
+            escaped = true;
+            break;
+        }
+    }
+
+    if (!escaped) {
+        gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+    } else {
+        gl_FragColor = vec4(colorize(t), 1.0);
+    }
+}`;}
+
+function compilePerturb(colorizerSrc) {
+    if (!perturbAvailable) return;
+    if (programPerturb) gl.deleteProgram(programPerturb);
+    programPerturb = linkProgram(VS_SRC, build2dPerturbFragSrc(colorizerSrc));
+}
+
+// ============================================================
 // Canvasgröße anpassen (Retina-Support)
 // ============================================================
 function resizeCanvas() {
@@ -423,15 +520,29 @@ function splitDS(x) {
 
 function render2d() {
     resizeCanvas();
-    gl.useProgram(program2d);
-    bindQuad(program2d);
-    gl.uniform2f(gl.getUniformLocation(program2d, 'u_res'), canvas.width, canvas.height);
-    const [cxhi, cxlo] = splitDS(center.x);
-    const [cyhi, cylo] = splitDS(center.y);
-    gl.uniform2f(gl.getUniformLocation(program2d, 'u_cx'), cxhi, cxlo);
-    gl.uniform2f(gl.getUniformLocation(program2d, 'u_cy'), cyhi, cylo);
-    gl.uniform1f(gl.getUniformLocation(program2d, 'u_zoom'), zoom);
-    gl.uniform1i(gl.getUniformLocation(program2d, 'u_maxIter'), maxIter2d);
+    const usePerturb = perturbAvailable && isDefaultFormula && orbitValid && programPerturb;
+
+    if (usePerturb) {
+        gl.useProgram(programPerturb);
+        bindQuad(programPerturb);
+        gl.uniform2f(gl.getUniformLocation(programPerturb, 'u_res'), canvas.width, canvas.height);
+        gl.uniform1f(gl.getUniformLocation(programPerturb, 'u_zoom'), zoom);
+        gl.uniform1i(gl.getUniformLocation(programPerturb, 'u_maxIter'), maxIter2d);
+        gl.activeTexture(gl.TEXTURE0);
+        gl.bindTexture(gl.TEXTURE_2D, orbitTex);
+        gl.uniform1i(gl.getUniformLocation(programPerturb, 'u_orbit'), 0);
+    } else {
+        gl.useProgram(program2d);
+        bindQuad(program2d);
+        gl.uniform2f(gl.getUniformLocation(program2d, 'u_res'), canvas.width, canvas.height);
+        const [cxhi, cxlo] = splitDS(center.x);
+        const [cyhi, cylo] = splitDS(center.y);
+        gl.uniform2f(gl.getUniformLocation(program2d, 'u_cx'), cxhi, cxlo);
+        gl.uniform2f(gl.getUniformLocation(program2d, 'u_cy'), cyhi, cylo);
+        gl.uniform1f(gl.getUniformLocation(program2d, 'u_zoom'), zoom);
+        gl.uniform1i(gl.getUniformLocation(program2d, 'u_maxIter'), maxIter2d);
+    }
+
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
 }
 
@@ -452,8 +563,13 @@ function renderLoop() {
 // Init
 // ============================================================
 function init() {
+    perturbAvailable = !!gl.getExtension('OES_texture_float');
     initQuad();
     compile2d(DEFAULT_FORMULA, DEFAULT_COLORIZER_2D);
+    if (perturbAvailable) {
+        compilePerturb(DEFAULT_COLORIZER_2D);
+        computeOrbit();
+    }
     // Editoren befüllen
     document.getElementById('formula-editor').value = DEFAULT_FORMULA;
     document.getElementById('colorizer-editor-2d').value = DEFAULT_COLORIZER_2D;
@@ -664,6 +780,7 @@ bindSlider('bulb-ao',  'bulb-ao-val',  v => parseFloat(v).toFixed(2));
 
 document.getElementById('max-iter').addEventListener('input', e => {
     maxIter2d = parseInt(e.target.value);
+    computeOrbit();
     needsRender = true;
 });
 document.getElementById('bulb-n').addEventListener('input', e => {
@@ -696,10 +813,11 @@ function showError(boxId, msg) {
 
 document.getElementById('apply-2d').addEventListener('click', () => {
     try {
-        compile2d(
-            document.getElementById('formula-editor').value,
-            document.getElementById('colorizer-editor-2d').value
-        );
+        const formulaSrc   = document.getElementById('formula-editor').value;
+        const colorizerSrc = document.getElementById('colorizer-editor-2d').value;
+        compile2d(formulaSrc, colorizerSrc);
+        isDefaultFormula = (formulaSrc.trim() === DEFAULT_FORMULA.trim());
+        if (perturbAvailable) compilePerturb(colorizerSrc);
         showError('error-2d', '');
         needsRender = true;
     } catch (e) {
@@ -738,6 +856,8 @@ document.getElementById('preset-select').addEventListener('change', e => {
     if (val !== 'custom') {
         document.getElementById('formula-editor').value = PRESETS[val];
     }
+    isDefaultFormula = (val === 'mandelbrot');
+    needsRender = true;
 });
 
 // ============================================================
@@ -801,6 +921,7 @@ window.addEventListener('mousemove', e => {
     center.x -= dx * (w / h) / w * 1.0 / zoom;
     center.y += dy / h * 1.0 / zoom;
     lastMouse = { x: e.clientX, y: e.clientY };
+    computeOrbit();
     updateInfo();
     needsRender = true;
 });
@@ -835,6 +956,7 @@ canvas.addEventListener('dblclick', e => {
     const p = pixelToComplex2(e.clientX - rect.left, e.clientY - rect.top);
     center = p;
     zoom *= 2.0;
+    computeOrbit();
     updateInfo();
     needsRender = true;
 });
