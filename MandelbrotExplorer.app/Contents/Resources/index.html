@@ -335,11 +335,19 @@ function build2dFragSrc(formulaSrc, colorizerSrc) {
     return `
 precision highp float;
 uniform vec2  u_res;
-uniform float u_cx, u_cy;
+uniform vec2  u_cx;     // double-single: (hi, lo)
+uniform vec2  u_cy;     // double-single: (hi, lo)
 uniform float u_zoom;
 uniform int   u_maxIter;
 
 ${GLSL_HELPERS}
+
+// Double-Single: exakte Summe zweier floats → (s, err)
+vec2 twoSum(float a, float b) {
+    float s = a + b;
+    float v = s - a;
+    return vec2(s, (a - (s - v)) + (b - v));
+}
 
 ${formulaSrc}
 
@@ -348,8 +356,15 @@ ${colorizerSrc}
 void main() {
     vec2 uv = (gl_FragCoord.xy / u_res - 0.5) * 2.0;
     uv.x *= u_res.x / u_res.y;
-    float scale = u_res.y * 0.5 * u_zoom;
-    vec2 c = vec2(u_cx, u_cy) + uv * (u_res.y * 0.25) / scale;
+    float delta = 0.5 / u_zoom;
+
+    // Hochpräzise Startkoordinaten (double-single Arithmetik)
+    vec2 ts;
+    ts = twoSum(u_cx.x, uv.x * delta); ts.y += u_cx.y;
+    float cx = ts.x;
+    ts = twoSum(u_cy.x, uv.y * delta); ts.y += u_cy.y;
+    float cy = ts.x;
+    vec2 c = vec2(cx, cy);
 
     vec2 z = vec2(0.0);
     float t = 0.0;
@@ -399,13 +414,22 @@ function resizeCanvas() {
 // ============================================================
 // 2D rendern
 // ============================================================
+// Veltkamp-Split: float64 → (hi, lo) als zwei float32
+function splitDS(x) {
+    const hi = Math.fround(x);
+    const lo = Math.fround(x - hi);
+    return [hi, lo];
+}
+
 function render2d() {
     resizeCanvas();
     gl.useProgram(program2d);
     bindQuad(program2d);
     gl.uniform2f(gl.getUniformLocation(program2d, 'u_res'), canvas.width, canvas.height);
-    gl.uniform1f(gl.getUniformLocation(program2d, 'u_cx'), center.x);
-    gl.uniform1f(gl.getUniformLocation(program2d, 'u_cy'), center.y);
+    const [cxhi, cxlo] = splitDS(center.x);
+    const [cyhi, cylo] = splitDS(center.y);
+    gl.uniform2f(gl.getUniformLocation(program2d, 'u_cx'), cxhi, cxlo);
+    gl.uniform2f(gl.getUniformLocation(program2d, 'u_cy'), cyhi, cylo);
     gl.uniform1f(gl.getUniformLocation(program2d, 'u_zoom'), zoom);
     gl.uniform1i(gl.getUniformLocation(program2d, 'u_maxIter'), maxIter2d);
     gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
@@ -801,7 +825,7 @@ canvas.addEventListener('wheel', e => {
     if (currentMode !== '3d') return;
     e.preventDefault();
     camera.dist *= e.deltaY < 0 ? 0.92 : 1.08;
-    camera.dist  = Math.max(1.5, Math.min(8.0, camera.dist));
+    camera.dist  = Math.max(1.1, Math.min(8.0, camera.dist));
     needsRender  = true;
 }, { passive: false });
 
