@@ -1,2 +1,445 @@
 <!DOCTYPE html>
-<html><body><h1>Mandelbrot Explorer – wird gebaut</h1></body></html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>Mandelbrot Explorer</title>
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+
+body {
+    display: flex;
+    width: 100vw;
+    height: 100vh;
+    background: #1a1a2e;
+    color: #e0e0e0;
+    font-family: 'SF Mono', 'Menlo', monospace;
+    font-size: 12px;
+    overflow: hidden;
+}
+
+#canvas-container {
+    flex: 1;
+    position: relative;
+    background: #000;
+}
+
+canvas {
+    width: 100%;
+    height: 100%;
+    display: block;
+    cursor: crosshair;
+}
+
+#panel {
+    width: 320px;
+    min-width: 320px;
+    background: #16213e;
+    border-left: 1px solid #0f3460;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+/* Tabs */
+#tabs {
+    display: flex;
+    border-bottom: 1px solid #0f3460;
+}
+.tab-btn {
+    flex: 1;
+    padding: 10px;
+    background: transparent;
+    border: none;
+    color: #888;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 12px;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    transition: all 0.2s;
+}
+.tab-btn.active {
+    color: #e94560;
+    border-bottom: 2px solid #e94560;
+    margin-bottom: -1px;
+}
+.tab-btn:hover { color: #e0e0e0; }
+
+/* Panel-Inhalte */
+.tab-content { display: none; flex: 1; flex-direction: column; overflow-y: auto; padding: 12px; gap: 12px; }
+.tab-content.active { display: flex; }
+
+.section-label {
+    font-size: 10px;
+    text-transform: uppercase;
+    letter-spacing: 2px;
+    color: #e94560;
+    margin-bottom: 4px;
+}
+
+select, textarea, input[type="range"] {
+    width: 100%;
+    background: #0f3460;
+    border: 1px solid #1a4a8a;
+    color: #e0e0e0;
+    border-radius: 4px;
+    padding: 6px 8px;
+    font-family: inherit;
+    font-size: 11px;
+}
+
+textarea {
+    resize: vertical;
+    min-height: 80px;
+    line-height: 1.5;
+}
+
+button.apply-btn {
+    width: 100%;
+    padding: 8px;
+    background: #e94560;
+    border: none;
+    border-radius: 4px;
+    color: white;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 12px;
+    letter-spacing: 1px;
+    transition: background 0.2s;
+}
+button.apply-btn:hover { background: #c73652; }
+
+.error-box {
+    background: #3a1020;
+    border: 1px solid #e94560;
+    border-radius: 4px;
+    padding: 8px;
+    font-size: 10px;
+    color: #ff8080;
+    display: none;
+    white-space: pre-wrap;
+    word-break: break-all;
+}
+
+.info-box {
+    background: #0a1628;
+    border: 1px solid #0f3460;
+    border-radius: 4px;
+    padding: 10px;
+    line-height: 2;
+}
+.info-row { display: flex; justify-content: space-between; }
+.info-label { color: #888; }
+.info-value { color: #4fc3f7; font-weight: bold; }
+
+.slider-group { display: flex; flex-direction: column; gap: 4px; }
+.slider-label { display: flex; justify-content: space-between; }
+</style>
+</head>
+<body>
+
+<div id="canvas-container">
+    <canvas id="glCanvas"></canvas>
+</div>
+
+<div id="panel">
+    <div id="tabs">
+        <button class="tab-btn active" data-tab="tab2d">2D Mandelbrot</button>
+        <button class="tab-btn" data-tab="tab3d">3D Mandelbulb</button>
+    </div>
+
+    <!-- 2D Panel -->
+    <div id="tab2d" class="tab-content active">
+        <div>
+            <div class="section-label">Preset</div>
+            <select id="preset-select">
+                <option value="mandelbrot">Mandelbrot (z² + c)</option>
+                <option value="burning-ship">Burning Ship</option>
+                <option value="tricorn">Tricorn</option>
+                <option value="multibrot3">Multibrot z³ + c</option>
+                <option value="custom">[Eigener Code]</option>
+            </select>
+        </div>
+        <div>
+            <div class="section-label">Formel (GLSL)</div>
+            <textarea id="formula-editor" rows="5" spellcheck="false"></textarea>
+        </div>
+        <div>
+            <div class="section-label">Colorizer (GLSL)</div>
+            <textarea id="colorizer-editor-2d" rows="5" spellcheck="false"></textarea>
+        </div>
+        <div>
+            <div class="section-label">Max. Iterationen</div>
+            <div class="slider-group">
+                <div class="slider-label">
+                    <span>Iterationen</span>
+                    <span id="iter-val">256</span>
+                </div>
+                <input type="range" id="max-iter" min="64" max="2048" step="64" value="256">
+            </div>
+        </div>
+        <button class="apply-btn" id="apply-2d">&#9654; Apply</button>
+        <div class="error-box" id="error-2d"></div>
+        <div>
+            <div class="section-label">Info</div>
+            <div class="info-box">
+                <div class="info-row"><span class="info-label">Re</span><span class="info-value" id="info-re">-0.5</span></div>
+                <div class="info-row"><span class="info-label">Im</span><span class="info-value" id="info-im">0.0</span></div>
+                <div class="info-row"><span class="info-label">Zoom</span><span class="info-value" id="info-zoom">1.00</span></div>
+            </div>
+        </div>
+    </div>
+
+    <!-- 3D Panel -->
+    <div id="tab3d" class="tab-content">
+        <div>
+            <div class="section-label">Exponent n</div>
+            <div class="slider-group">
+                <div class="slider-label"><span>n</span><span id="bulb-n-val">8</span></div>
+                <input type="range" id="bulb-n" min="2" max="12" step="1" value="8">
+            </div>
+        </div>
+        <div>
+            <div class="section-label">Max. Iterationen</div>
+            <div class="slider-group">
+                <div class="slider-label"><span>Iterationen</span><span id="bulb-iter-val">8</span></div>
+                <input type="range" id="bulb-iter" min="4" max="64" step="4" value="8">
+            </div>
+        </div>
+        <div>
+            <div class="section-label">AO-Stärke</div>
+            <div class="slider-group">
+                <div class="slider-label"><span>AO</span><span id="bulb-ao-val">0.50</span></div>
+                <input type="range" id="bulb-ao" min="0" max="1" step="0.05" value="0.5">
+            </div>
+        </div>
+        <div>
+            <div class="section-label">Colorizer (GLSL)</div>
+            <textarea id="colorizer-editor-3d" rows="5" spellcheck="false"></textarea>
+        </div>
+        <button class="apply-btn" id="apply-3d">&#9654; Apply</button>
+        <div class="error-box" id="error-3d"></div>
+        <div>
+            <div class="section-label">Info</div>
+            <div class="info-box">
+                <div class="info-row"><span class="info-label">Renderzeit</span><span class="info-value" id="info-render">–</span></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+// ============================================================
+// Globaler Zustand
+// ============================================================
+const canvas = document.getElementById('glCanvas');
+const gl = canvas.getContext('webgl') || canvas.getContext('experimental-webgl');
+if (!gl) { alert('WebGL wird nicht unterstützt'); }
+
+let currentMode = '2d';  // '2d' | '3d'
+let program2d = null;
+let program3d = null;
+let quadBuffer = null;
+
+// 2D-Zustand
+let center = { x: -0.5, y: 0.0 };
+let zoom = 1.0;
+let maxIter2d = 256;
+
+// 3D-Zustand
+let bulbN = 8.0;
+let bulbIter = 8;
+let bulbAO = 0.5;
+let camera = { theta: 0.5, phi: 0.3, dist: 3.5 };
+
+// ============================================================
+// Hilfsfunktionen: Shader compilieren
+// ============================================================
+function compileShader(type, src) {
+    const sh = gl.createShader(type);
+    gl.shaderSource(sh, src);
+    gl.compileShader(sh);
+    if (!gl.getShaderParameter(sh, gl.COMPILE_STATUS)) {
+        const err = gl.getShaderInfoLog(sh);
+        gl.deleteShader(sh);
+        throw new Error(err);
+    }
+    return sh;
+}
+
+function linkProgram(vsSrc, fsSrc) {
+    const vs = compileShader(gl.VERTEX_SHADER, vsSrc);
+    const fs = compileShader(gl.FRAGMENT_SHADER, fsSrc);
+    const prog = gl.createProgram();
+    gl.attachShader(prog, vs);
+    gl.attachShader(prog, fs);
+    gl.linkProgram(prog);
+    if (!gl.getProgramParameter(prog, gl.LINK_STATUS)) {
+        const err = gl.getProgramInfoLog(prog);
+        gl.deleteProgram(prog);
+        throw new Error(err);
+    }
+    return prog;
+}
+
+// ============================================================
+// Fullscreen-Quad (bleibt für beide Modi)
+// ============================================================
+function initQuad() {
+    quadBuffer = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, quadBuffer);
+    gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([
+        -1,-1,  1,-1,  -1,1,  1,1
+    ]), gl.STATIC_DRAW);
+}
+
+function bindQuad(program) {
+    gl.bindBuffer(gl.ARRAY_BUFFER, quadBuffer);
+    const loc = gl.getAttribLocation(program, 'a_pos');
+    gl.enableVertexAttribArray(loc);
+    gl.vertexAttribPointer(loc, 2, gl.FLOAT, false, 0, 0);
+}
+
+// ============================================================
+// Vertex-Shader (gleich für 2D und 3D)
+// ============================================================
+const VS_SRC = `
+attribute vec2 a_pos;
+void main() { gl_Position = vec4(a_pos, 0.0, 1.0); }
+`;
+
+// ============================================================
+// Hilfsfunktionen für GLSL-Strings (in beide Shader eingebettet)
+// ============================================================
+const GLSL_HELPERS = `
+vec3 hsv2rgb(vec3 c) {
+    vec4 K = vec4(1.0, 2.0/3.0, 1.0/3.0, 3.0);
+    vec3 p = abs(fract(c.xxx + K.xyz) * 6.0 - K.www);
+    return c.z * mix(K.xxx, clamp(p - K.xxx, 0.0, 1.0), c.y);
+}
+`;
+
+// ============================================================
+// 2D-Shader aufbauen
+// ============================================================
+const DEFAULT_FORMULA = `vec2 formula(vec2 z, vec2 c) {
+    return vec2(z.x*z.x - z.y*z.y + c.x,
+                2.0*z.x*z.y        + c.y);
+}`;
+
+const DEFAULT_COLORIZER_2D = `vec3 colorize(float t) {
+    return hsv2rgb(vec3(t * 3.0 + 0.6, 0.85, sqrt(t)));
+}`;
+
+function build2dFragSrc(formulaSrc, colorizerSrc) {
+    return `
+precision highp float;
+uniform vec2  u_res;
+uniform float u_cx, u_cy;
+uniform float u_zoom;
+uniform int   u_maxIter;
+
+${GLSL_HELPERS}
+
+${formulaSrc}
+
+${colorizerSrc}
+
+void main() {
+    vec2 uv = (gl_FragCoord.xy / u_res - 0.5) * 2.0;
+    uv.x *= u_res.x / u_res.y;
+    float scale = u_res.y * 0.5 * u_zoom;
+    vec2 c = vec2(u_cx, u_cy) + uv * (u_res.y * 0.25) / scale;
+
+    vec2 z = vec2(0.0);
+    float t = 0.0;
+    bool escaped = false;
+    for (int i = 0; i < 4096; i++) {
+        if (i >= u_maxIter) break;
+        z = formula(z, c);
+        float r2 = dot(z, z);
+        if (r2 > 256.0) {
+            // Smooth coloring (Bernstein)
+            float smooth = float(i) + 1.0 - log2(log2(sqrt(r2)));
+            t = clamp(smooth / float(u_maxIter), 0.0, 1.0);
+            escaped = true;
+            break;
+        }
+    }
+    if (!escaped) {
+        gl_FragColor = vec4(0.0, 0.0, 0.0, 1.0);
+    } else {
+        gl_FragColor = vec4(colorize(t), 1.0);
+    }
+}`;
+}
+
+// ============================================================
+// 2D-Shader kompilieren
+// ============================================================
+function compile2d(formulaSrc, colorizerSrc) {
+    if (program2d) gl.deleteProgram(program2d);
+    program2d = linkProgram(VS_SRC, build2dFragSrc(formulaSrc, colorizerSrc));
+}
+
+// ============================================================
+// Canvasgröße anpassen (Retina-Support)
+// ============================================================
+function resizeCanvas() {
+    const dpr = window.devicePixelRatio || 1;
+    const w = canvas.clientWidth  * dpr;
+    const h = canvas.clientHeight * dpr;
+    if (canvas.width !== w || canvas.height !== h) {
+        canvas.width  = w;
+        canvas.height = h;
+        gl.viewport(0, 0, w, h);
+    }
+}
+
+// ============================================================
+// 2D rendern
+// ============================================================
+function render2d() {
+    resizeCanvas();
+    gl.useProgram(program2d);
+    bindQuad(program2d);
+    gl.uniform2f(gl.getUniformLocation(program2d, 'u_res'), canvas.width, canvas.height);
+    gl.uniform1f(gl.getUniformLocation(program2d, 'u_cx'), center.x);
+    gl.uniform1f(gl.getUniformLocation(program2d, 'u_cy'), center.y);
+    gl.uniform1f(gl.getUniformLocation(program2d, 'u_zoom'), zoom);
+    gl.uniform1i(gl.getUniformLocation(program2d, 'u_maxIter'), maxIter2d);
+    gl.drawArrays(gl.TRIANGLE_STRIP, 0, 4);
+}
+
+// ============================================================
+// Render-Loop
+// ============================================================
+let needsRender = true;
+function renderLoop() {
+    if (needsRender) {
+        needsRender = false;
+        if (currentMode === '2d' && program2d) render2d();
+        // 3D kommt in Task 6
+    }
+    requestAnimationFrame(renderLoop);
+}
+
+// ============================================================
+// Init
+// ============================================================
+function init() {
+    initQuad();
+    compile2d(DEFAULT_FORMULA, DEFAULT_COLORIZER_2D);
+    // Editoren befüllen
+    document.getElementById('formula-editor').value = DEFAULT_FORMULA;
+    document.getElementById('colorizer-editor-2d').value = DEFAULT_COLORIZER_2D;
+    document.getElementById('colorizer-editor-3d').value = DEFAULT_COLORIZER_2D;
+    needsRender = true;
+    renderLoop();
+}
+
+window.addEventListener('load', init);
+window.addEventListener('resize', () => { needsRender = true; });
+</script>
+</body>
+</html>
