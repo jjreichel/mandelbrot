@@ -438,6 +438,110 @@ function init() {
     renderLoop();
 }
 
+// ============================================================
+// Tab-Wechsel
+// ============================================================
+document.querySelectorAll('.tab-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+        document.querySelectorAll('.tab-btn').forEach(b => b.classList.remove('active'));
+        document.querySelectorAll('.tab-content').forEach(c => c.classList.remove('active'));
+        btn.classList.add('active');
+        document.getElementById(btn.dataset.tab).classList.add('active');
+        currentMode = btn.dataset.tab === 'tab2d' ? '2d' : '3d';
+        needsRender = true;
+    });
+});
+
+// ============================================================
+// Slider-Werte live anzeigen
+// ============================================================
+function bindSlider(id, displayId, format) {
+    const el = document.getElementById(id);
+    const disp = document.getElementById(displayId);
+    el.addEventListener('input', () => {
+        disp.textContent = format(el.value);
+        needsRender = true;
+    });
+    disp.textContent = format(el.value);
+}
+
+bindSlider('max-iter', 'iter-val', v => v);
+bindSlider('bulb-n',   'bulb-n-val', v => v);
+bindSlider('bulb-iter','bulb-iter-val', v => v);
+bindSlider('bulb-ao',  'bulb-ao-val',  v => parseFloat(v).toFixed(2));
+
+document.getElementById('max-iter').addEventListener('input', e => {
+    maxIter2d = parseInt(e.target.value);
+    needsRender = true;
+});
+document.getElementById('bulb-n').addEventListener('input', e => {
+    bulbN = parseFloat(e.target.value);
+    needsRender = true;
+});
+document.getElementById('bulb-iter').addEventListener('input', e => {
+    bulbIter = parseInt(e.target.value);
+    needsRender = true;
+});
+document.getElementById('bulb-ao').addEventListener('input', e => {
+    bulbAO = parseFloat(e.target.value);
+    needsRender = true;
+});
+
+// ============================================================
+// Apply-Buttons
+// ============================================================
+function showError(boxId, msg) {
+    const box = document.getElementById(boxId);
+    box.style.display = msg ? 'block' : 'none';
+    box.textContent = msg || '';
+}
+
+document.getElementById('apply-2d').addEventListener('click', () => {
+    try {
+        compile2d(
+            document.getElementById('formula-editor').value,
+            document.getElementById('colorizer-editor-2d').value
+        );
+        showError('error-2d', '');
+        needsRender = true;
+    } catch (e) {
+        showError('error-2d', e.message);
+    }
+});
+
+// ============================================================
+// Formel-Presets
+// ============================================================
+const PRESETS = {
+    'mandelbrot': `vec2 formula(vec2 z, vec2 c) {
+    return vec2(z.x*z.x - z.y*z.y + c.x,
+                2.0*z.x*z.y        + c.y);
+}`,
+    'burning-ship': `vec2 formula(vec2 z, vec2 c) {
+    float ax = abs(z.x), ay = abs(z.y);
+    return vec2(ax*ax - ay*ay + c.x,
+                2.0*ax*ay    + c.y);
+}`,
+    'tricorn': `vec2 formula(vec2 z, vec2 c) {
+    // Konjugat von z, dann quadrieren
+    return vec2(z.x*z.x - z.y*z.y + c.x,
+               -2.0*z.x*z.y       + c.y);
+}`,
+    'multibrot3': `vec2 formula(vec2 z, vec2 c) {
+    // z^3 + c
+    float x2 = z.x*z.x, y2 = z.y*z.y;
+    return vec2(z.x*(x2 - 3.0*y2) + c.x,
+                z.y*(3.0*x2 - y2) + c.y);
+}`
+};
+
+document.getElementById('preset-select').addEventListener('change', e => {
+    const val = e.target.value;
+    if (val !== 'custom') {
+        document.getElementById('formula-editor').value = PRESETS[val];
+    }
+});
+
 window.addEventListener('load', init);
 window.addEventListener('resize', () => { needsRender = true; });
 </script>
