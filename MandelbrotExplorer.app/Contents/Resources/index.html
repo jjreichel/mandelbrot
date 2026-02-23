@@ -109,6 +109,24 @@ button.apply-btn {
 }
 button.apply-btn:hover { background: #c73652; }
 
+button.reset-btn {
+    width: 100%;
+    padding: 7px;
+    background: transparent;
+    border: 1px solid #0f3460;
+    border-radius: 4px;
+    color: #888;
+    cursor: pointer;
+    font-family: inherit;
+    font-size: 11px;
+    letter-spacing: 1px;
+    transition: all 0.2s;
+}
+button.reset-btn:hover {
+    border-color: #4fc3f7;
+    color: #4fc3f7;
+}
+
 .error-box {
     background: #3a1020;
     border: 1px solid #e94560;
@@ -207,6 +225,7 @@ button.apply-btn:hover { background: #c73652; }
                 <div class="info-row"><span class="info-label">Zoom</span><span class="info-value" id="info-zoom">1.00</span></div>
             </div>
         </div>
+        <button class="reset-btn" id="reset-view">&#8962; Ursprung</button>
     </div>
 
     <!-- 3D Panel -->
@@ -1000,6 +1019,17 @@ function updateInfo() {
     document.getElementById('info-im').textContent   = center.y.toExponential(4);
     document.getElementById('info-zoom').textContent = zoom.toExponential(3);
 }
+
+// ============================================================
+// Reset-Knopf: Ursprungsansicht
+// ============================================================
+document.getElementById('reset-view').addEventListener('click', () => {
+    center = { x: -0.5, y: 0.0 };
+    zoom = 1.0;
+    computeOrbit();
+    updateInfo();
+    needsRender = true;
+});
 
 window.addEventListener('load', init);
 window.addEventListener('resize', () => { needsRender = true; });
