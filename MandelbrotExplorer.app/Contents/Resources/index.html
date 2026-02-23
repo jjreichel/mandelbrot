@@ -134,6 +134,19 @@ button.apply-btn:hover { background: #c73652; }
 
 .slider-group { display: flex; flex-direction: column; gap: 4px; }
 .slider-label { display: flex; justify-content: space-between; }
+
+.formula-display {
+    background: #0a1628;
+    border: 1px solid #0f3460;
+    border-radius: 4px;
+    padding: 8px 12px;
+    font-size: 14px;
+    text-align: center;
+    color: #4fc3f7;
+    letter-spacing: 0.5px;
+    line-height: 1.8;
+    font-family: 'Georgia', 'Times New Roman', serif;
+}
 </style>
 </head>
 <body>
@@ -159,6 +172,12 @@ button.apply-btn:hover { background: #c73652; }
                 <option value="multibrot3">Multibrot z³ + c</option>
                 <option value="custom">[Eigener Code]</option>
             </select>
+        </div>
+        <div>
+            <div class="section-label">Formel</div>
+            <div class="formula-display" id="formula-display">
+                z<sub>n+1</sub> = z<sub>n</sub>² + c
+            </div>
         </div>
         <div>
             <div class="section-label">Formel (GLSL)</div>
@@ -851,12 +870,24 @@ const PRESETS = {
 }`
 };
 
+// ============================================================
+// Mathematische Formel-Anzeige pro Preset
+// ============================================================
+const FORMULA_DISPLAY = {
+    'mandelbrot':   'z<sub>n+1</sub> = z<sub>n</sub>² + c',
+    'burning-ship': 'z<sub>n+1</sub> = (|Re z<sub>n</sub>| + i·|Im z<sub>n</sub>|)² + c',
+    'tricorn':      'z<sub>n+1</sub> = z̄<sub>n</sub>² + c',
+    'multibrot3':   'z<sub>n+1</sub> = z<sub>n</sub>³ + c',
+    'custom':       'z<sub>n+1</sub> = f(z<sub>n</sub>, c)'
+};
+
 document.getElementById('preset-select').addEventListener('change', e => {
     const val = e.target.value;
     if (val !== 'custom') {
         document.getElementById('formula-editor').value = PRESETS[val];
     }
     isDefaultFormula = (val === 'mandelbrot');
+    document.getElementById('formula-display').innerHTML = FORMULA_DISPLAY[val] || FORMULA_DISPLAY['custom'];
     needsRender = true;
 });
 
