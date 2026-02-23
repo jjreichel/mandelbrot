@@ -194,7 +194,7 @@ button.apply-btn:hover { background: #c73652; }
                     <span>Iterationen</span>
                     <span id="iter-val">256</span>
                 </div>
-                <input type="range" id="max-iter" min="64" max="2048" step="64" value="256">
+                <input type="range" id="max-iter" min="64" max="16384" step="64" value="256">
             </div>
         </div>
         <button class="apply-btn" id="apply-2d">&#9654; Apply</button>
@@ -395,7 +395,7 @@ void main() {
     vec2 z = vec2(0.0);
     float t = 0.0;
     bool escaped = false;
-    for (int i = 0; i < 4096; i++) {
+    for (int i = 0; i < 16384; i++) {
         if (i >= u_maxIter) break;
         z = formula(z, c);
         float r2 = dot(z, z);
@@ -479,7 +479,7 @@ void main() {
     float t  = 0.0;
     bool escaped = false;
 
-    for (int i = 0; i < 4096; i++) {
+    for (int i = 0; i < 16384; i++) {
         if (i >= u_maxIter) break;
 
         // Referenz-Orbit Z_i aus Textur
